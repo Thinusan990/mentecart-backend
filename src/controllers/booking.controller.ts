@@ -8,32 +8,118 @@ export async function checkout(
   res: Response
 ) {
   try {
-    const cart = await Cart.findOne({ user: req.userId });
 
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({
-        message: "Cart is empty",
+    const {
+      selectedItems,
+      paymentMethod,
+      status,
+    } = req.body;
+
+    const cart =
+      await Cart.findOne({
+        user: req.userId,
+      });
+
+    if (!cart) {
+
+      return res.status(404).json({
+        message: "Cart not found",
       });
     }
 
-    const booking = await Booking.create({
-      user: req.userId,
-      items: cart.items,
-      totalPrice: cart.totalPrice,
-      status: "confirmed",
-      paymentMethod: "cash",
-      paymentStatus: "not_required",
-    });
+    /// GET ONLY SELECTED ITEMS
+    const checkoutItems =
+        cart.items.filter(
+      (item: any) =>
+        selectedItems.includes(
+          item._id.toString()
+        )
+    );
 
-    cart.items = [];
-    cart.totalPrice = 0;
+    if (!checkoutItems.length) {
+
+      return res.status(400).json({
+        message:
+            "No items selected",
+      });
+    }
+
+    /// CALCULATE TOTAL
+    const total =
+        checkoutItems.reduce(
+
+      (sum: number, item: any) =>
+
+        sum +
+        item.price * item.quantity,
+
+      0
+    );
+
+    /// CREATE BOOKING
+   const booking =
+    await Booking.create({
+
+  user: req.userId,
+
+  items: checkoutItems,
+
+  totalPrice: total,
+
+  paymentMethod,
+
+  status,
+});
+    /// REMOVE ONLY CHECKED OUT ITEMS
+    cart.items = cart.items.filter(
+      (item: any) =>
+
+        !selectedItems.includes(
+          item._id.toString()
+        )
+    ) as any;
+
+    /// RECALCULATE TOTAL
+    cart.totalPrice =
+        cart.items.reduce(
+
+      (sum: number, item: any) =>
+
+        sum +
+        item.price * item.quantity,
+
+      0
+    );
 
     await cart.save();
 
-    return res.status(201).json(booking);
+    console.log(
+      "BOOKING CREATED => ",
+      JSON.stringify(
+        booking,
+        null,
+        2
+      )
+    );
+
+    return res.status(201).json({
+
+      message:
+          "Booking successful",
+
+      booking,
+    });
+
   } catch (error) {
+
+    console.log(
+      "CHECKOUT ERROR => ",
+      error
+    );
+
     return res.status(500).json({
-      message: "Checkout failed",
+      message:
+          "Checkout failed",
     });
   }
 }
